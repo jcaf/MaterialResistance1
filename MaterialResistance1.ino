@@ -9,7 +9,7 @@ extern "C"{
     #include "src/i2c/I2CCommonFx.h"
     #include "src/ads1115/ads1115.h"
     #include "src/voltageMeas/voltageMeas.h"
-    #include "src/usart/usart.h"
+    //#include "src/usart/usart.h"
     #include "src/pinGetLevel/pinGetLevel.h"
 };
 volatile struct _isr_flag
@@ -27,9 +27,8 @@ struct _main_flag
 
 }main_flag = { 0,0 };
 
-volatile float metros;
-volatile float kmeters = 0;
-
+volatile float metros = 0.0f;
+volatile float kmeters = 1.0f;//c/x metros
 
 //+- Encoder
 /*
@@ -38,38 +37,30 @@ volatile float kmeters = 0;
 */
 //unidad de medicion = Metros
 #define ENC_NUMPULSOS_VUELTA 500    //500 pulsos por vuelta, salida del encoder en una sola direccion
-float ENC_1V_METROSLINEAL = 0.5;    //metros
-float ENC_RESOL = ENC_1V_METROSLINEAL/ENC_NUMPULSOS_VUELTA;
+float ENC_1V_METROSLINEAL = 0.5f;    //metros
+float ENC_RESOL = (float)ENC_1V_METROSLINEAL/ENC_NUMPULSOS_VUELTA;
 
 #include "qdec.h"
 #define ROTARY_PIN_A 2//D2
 #define ROTARY_PIN_B 3//D3
 ::SimpleHacks::QDecoder qdec(ROTARY_PIN_A, ROTARY_PIN_B, true);
 volatile int32_t rotaryCount = 0;
-int lastLoopDisplayedRotaryCount = 0;
 void IsrForQDEC(void);
 //-+
+
 void IsrForQDEC(void)
 {
-  using namespace ::SimpleHacks;
-  QDECODER_EVENT event = qdec.update();
-
-  if (event & QDECODER_EVENT_CW)
-  {
-    rotaryCount++;
-  }
-  else if (event & QDECODER_EVENT_CCW)
-  {
-    rotaryCount--;
-  }
-  //
-//  metros = rotaryCount * ENC_RESOL;//
-//  if ( (metros % kmeters) == 0) //Si es multiplo de kmeters...
-//  {
-//    isr_flag.adq = 1;
-//  }
-//
-  return;
+	using namespace ::SimpleHacks;
+	QDECODER_EVENT event = qdec.update();
+	if (event & QDECODER_EVENT_CW)
+	{
+		rotaryCount++;
+	}
+	else if (event & QDECODER_EVENT_CCW)
+	{
+		rotaryCount--;
+	}
+	return;
 }
 
 inline float enc_getMeters(void)
@@ -105,29 +96,28 @@ void setup()
     qdec.begin();
     attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_A), IsrForQDEC, CHANGE);
     attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_B), IsrForQDEC, CHANGE);
-
-    //USART por hardware
+    
     //USART_Init ( MYUBRR );//@9600
-    Serial.begin(9600);
+    Serial.begin(230400);
+    //Serial.begin(9600);
 
     //D4 = PG5 SW reset encoder counter
     pinGetLevel_init(); //with Changed=flag activated at initialization
     //PinTo1(PORTWxSW_ENC_RESET, PIN_SW_ENC_RESET); //Enable pull-up
     //ConfigInputPin(DDRxSW_ENC_RESET, PIN_SW_ENC_RESET);
 
-    //int
-    //Config to 10ms
+    //Config TCNT0 CT Atmega2560
     TCNT0 = 0x00;
-    TCCR0A = (1 << WGM01) | (1 << CS02) | (0 << CS01) | (1 << CS00); //CTC, PRES=1024
+    TCCR0A = (1 << WGM01);//CTC mode
+    TCCR0B = (1 << CS02) | (0 << CS01) | (1 << CS00); //CTC, PRES=1024
     OCR0A = CTC_SET_OCR_BYTIME(10e-3, 1024); //TMR8-BIT @16MHz @PRES=1024-> BYTIME maximum = 16ms
     //
-    TIMSK1 |= (1 << OCIE0A);
+    TIMSK0 |= (1 << OCIE0A);
     sei();
 }
 
-int8_t send(int32_t m, float v)
+int8_t send(float m, float v)
 {
-    //aun por definir el envio
     Serial.print("["); Serial.print(m); Serial.print(" m,");
     Serial.print(v);Serial.println(" v]");
     return 0;
@@ -135,10 +125,8 @@ int8_t send(int32_t m, float v)
 
 void loop()
 {
-	//volatile
 	float metros_diff = 0;
-	//volatile
-	float kmeter_new0 = 0;
+	static float kmeter_new0 = 0;
 
     float  voltaje;
     int8_t SW=0;
@@ -150,15 +138,14 @@ void loop()
         isr_flag.f10ms = 0;
         main_flag.f10ms = 1;
     }
-//    if (isr_flag.adq)
-//    {
-//        isr_flag.adq  = 0;
-//        main_flag.adq = 1;
-//    }
 
     //-------------------------
     //+-
+    //Serial.println(rotaryCount);
     metros = enc_getMeters();
+    //    Serial.println(metros);
+    //return 0;
+
     metros_diff = metros - kmeter_new0;
     if (metros_diff >= kmeters)
     {
@@ -166,7 +153,6 @@ void loop()
         //
         voltaje = voltageMeas();//en ese punto, no el promedio
 		send(metros, voltaje);
-
     }//+-
 
     //----------------------
@@ -198,7 +184,6 @@ void loop()
     // }
     main_flag.f10ms = 0;
 }
-
 
 ISR(TIMER0_COMPA_vect)
 {
