@@ -1,6 +1,7 @@
-/*
- * V.1
- * Sabado
+/* Medicion de resistencia de material
+ * Eclipse IDE Eclipse IDE for C/C++ Developers (includes Incubating components) Version: 2020-12 (4.18.0)
+ * Arduino Plugins
+ *
  */
 
 extern "C"{
@@ -27,46 +28,43 @@ struct _main_flag
 
 }main_flag = { 0,0 };
 
-volatile float metros = 0.0f;
-volatile float kmeters = 1.0f;//c/x metros
 
 //+- Encoder
-/*
-500 pulsos / vuelta
-1 vuelta = m
-*/
-//unidad de medicion = Metros
-#define ENC_NUMPULSOS_VUELTA 500    //500 pulsos por vuelta, salida del encoder en una sola direccion
-float ENC_1V_METROSLINEAL = 0.5f;    //metros
-float ENC_RESOL = (float)ENC_1V_METROSLINEAL/ENC_NUMPULSOS_VUELTA;
+uint16_t ENCODER_PPR = 500;    			//500 Pulses Per Revolution
+float ENCODER_1REV_INMETERS = 0.5f;    	//1revol = X meters
+volatile float ADQ_KMETERS = 0.15f;		//Adquirir cada "x metros"
+
+float ENC_RESOL = (float)ENCODER_1REV_INMETERS/ENCODER_PPR;
 
 #include "qdec.h"
 #define ROTARY_PIN_A 2//D2
 #define ROTARY_PIN_B 3//D3
-::SimpleHacks::QDecoder qdec(ROTARY_PIN_A, ROTARY_PIN_B, true);
-volatile int32_t rotaryCount = 0;
 void IsrForQDEC(void);
-//-+
+::SimpleHacks::QDecoder qdec(ROTARY_PIN_A, ROTARY_PIN_B, true);
+//
+typedef int64_t ROTARYCOUNT_T;//para rotaryCount y quien va a tomar su ultimo valor para comparar
+//
+volatile ROTARYCOUNT_T rotaryCount = 0;
+ROTARYCOUNT_T rotaryCount_last = 0;	//toma el valor de rotaryCount para ser el nuevo punto de referencia de inicio
+
+//Las sgtes. variables no necesitan ser de 64bits
+int32_t numPulsesIn_ADQ_KMETERS = (ADQ_KMETERS * ENCODER_PPR) / ENCODER_1REV_INMETERS;//truncar
+int32_t numPulses_diff = 0;
 
 void IsrForQDEC(void)
 {
 	using namespace ::SimpleHacks;
 	QDECODER_EVENT event = qdec.update();
 	if (event & QDECODER_EVENT_CW)
-	{
 		rotaryCount++;
-	}
 	else if (event & QDECODER_EVENT_CCW)
-	{
 		rotaryCount--;
-	}
-	return;
 }
 
-inline float enc_getMeters(void)
-{
- return rotaryCount * ENC_RESOL;
-}
+//inline float enc_getMeters(void)
+//{
+// return rotaryCount * ENC_RESOL;
+//}
 inline void enc_resetCounter(void)
 {
     rotaryCount = 0x00;
@@ -111,7 +109,6 @@ void setup()
     TCCR0A = (1 << WGM01);//CTC mode
     TCCR0B = (1 << CS02) | (0 << CS01) | (1 << CS00); //CTC, PRES=1024
     OCR0A = CTC_SET_OCR_BYTIME(10e-3, 1024); //TMR8-BIT @16MHz @PRES=1024-> BYTIME maximum = 16ms
-    //
     TIMSK0 |= (1 << OCIE0A);
     sei();
 }
@@ -125,11 +122,10 @@ int8_t send(float m, float v)
 
 void loop()
 {
-	float metros_diff = 0;
-	static float kmeter_new0 = 0;
-
-    float  voltaje;
-    int8_t SW=0;
+	float meters;
+	float  volts;
+    //
+	int8_t SW=0;
     static int8_t c;
 
     //-------------------------
@@ -138,22 +134,16 @@ void loop()
         isr_flag.f10ms = 0;
         main_flag.f10ms = 1;
     }
-
     //-------------------------
-    //+-
-    //Serial.println(rotaryCount);
-    metros = enc_getMeters();
-    //    Serial.println(metros);
-    //return 0;
+	numPulses_diff = rotaryCount - rotaryCount_last;//el software estaria siempre recibiendo el rotaryCount
+	if (numPulses_diff >= numPulsesIn_ADQ_KMETERS)
+	{
+		rotaryCount_last = rotaryCount;
 
-    metros_diff = metros - kmeter_new0;
-    if (metros_diff >= kmeters)
-    {
-        kmeter_new0 = metros;
-        //
-        voltaje = voltageMeas();//en ese punto, no el promedio
-		send(metros, voltaje);
-    }//+-
+		//Serial.print("pdiff: ");Serial.print(numPulses_diff);
+		meters = rotaryCount * ENC_RESOL;
+		Serial.print(meters); Serial.println(" m");
+	}
 
     //----------------------
     if (main_flag.f10ms)
