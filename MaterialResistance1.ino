@@ -68,6 +68,7 @@ void IsrForQDEC(void)
 inline void enc_resetCounter(void)
 {
     rotaryCount = 0x00;
+    rotaryCount_last = 0x00;
 }
 
 //PD4
@@ -78,26 +79,38 @@ inline void enc_resetCounter(void)
 
 int16_t ADQ_KTIME=0;
 
+
+//Current measurement
+#define TRAMA_START '@'
+#define TRAMA_END 	'\n'
+//#define TRAMA_PAYLOAD_SIZEMAX    sizeof(float)//determinado por el compilador
+
+float meters = 0.0f;
+float volts = 0.0f;
+float current = 0.0f;
+//
 void setup()
 {
-    //ADS1115 init
-    I2C_unimaster_init(100E3);//100KHz
-    uint8_t reg[2];
 
-    //++--Write config
+    I2C_unimaster_init(100E3);//100KHz
+
+    //ADS1115 init
+    uint8_t reg[2];
     reg[0] = (1<<OS_BIT) | (MUX_AIN0_GND<<MUX_BIT) | (PGA_4p096V<<PGA_BIT) | (CONTINUOUS_CONV<<MODE_BIT);//PGA 4.096V -> RESOL=125 μV
-    reg[1] = (DR_860SPS<<DR_BIT);
+    reg[1] = (DR_8SPS<<DR_BIT);//menos ruido
     I2Ccfx_WriteArray(ADS115_ADR_GND, ADS1115_CONFIG_REG, &reg[0], 2);
-    //default state of ConfigRegister = 0x8583 = 34179
 
     //Encoder init
     qdec.begin();
     attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_A), IsrForQDEC, CHANGE);
     attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_B), IsrForQDEC, CHANGE);
     
-    //USART_Init ( MYUBRR );//@9600
-    Serial.begin(230400);
-    //Serial.begin(9600);
+    Serial.begin(230400);	//USART0 x PC
+    //Serial1.begin(9600);	//USART1 x ATmega328P x current measurement 9600 ok
+    Serial1.begin(38400);	//USART1 x ATmega328P x current measurement 38400 ok
+    //Serial1.begin(76800);	//USART1 x ATmega328P x current measurement
+
+    //Serial2.begin(115200);	//USART2 x HC05 BLuetooth
 
     //D4 = PG5 SW reset encoder counter
     pinGetLevel_init(); //with Changed=flag activated at initialization
@@ -112,21 +125,30 @@ void setup()
     TIMSK0 |= (1 << OCIE0A);
     sei();
 }
-
-int8_t send(float m, float v)
+int8_t send(float m, float v, float current)
 {
-    Serial.print("["); Serial.print(m); Serial.print(" m,");
-    Serial.print(v);Serial.println(" v]");
+    Serial.print(m,2);
+    Serial.print(",");
+    //Serial.println(v*1000,1);//represente en millivolts
+
+    Serial.print(v*1000,1);//represente en millivolts
+    Serial.print(",");
+    Serial.println(current,2);
+
     return 0;
 }
 
+
 void loop()
 {
-	float meters;
-	float  volts;
-    //
+	uint8_t c;
+	static int8_t sm0 = 0;
+	static int8_t trama_counter=0;
+	static char pcurrentBuffered[20];
+	//
+
 	int8_t SW=0;
-    static int8_t c;
+    static int8_t counter1;
 
     //-------------------------
     if (isr_flag.f10ms)
@@ -142,16 +164,19 @@ void loop()
 
 		//Serial.print("pdiff: ");Serial.print(numPulses_diff);
 		meters = rotaryCount * ENC_RESOL;
-		Serial.print(meters); Serial.println(" m");
+		//Serial.print(meters);// Serial.println(" m");
+		volts = voltageMeas();
+		//send(meters,volts);
+		send(meters,volts, current);
 	}
+	//Serial.println(voltageMeas());
 
     //----------------------
     if (main_flag.f10ms)
     {
-        if (++c == 2)    //20ms
+        if (++counter1 == 2)    //20ms
         {
-            c = 0;
-
+            counter1 = 0;
             pinGetLevel_job();
             if (pinGetLevel_hasChanged(PGLEVEL_LYOUT_SW_ENC_RESET))
             {
@@ -167,12 +192,39 @@ void loop()
         enc_resetCounter();// resetear el contador de # de pulsos
         SW = 0x00;
     }
-    //-+
-    // if (char == "i")//set new adquisition time
-    // {
-    //     ADQ_KTIME =  / 20;//20ms... el intervalo que envie el host div.x 20ms
-    // }
+
     main_flag.f10ms = 0;
+
+    //Current measurement
+    if (Serial1.available() > 0)
+    {
+    	 c = Serial1.read();
+
+    	 if (sm0 == 0)
+    	 {
+    		 if (c == TRAMA_START)
+    		 {
+    			 trama_counter = 0x00;
+    			 sm0++;
+    		 }
+    	 }
+    	 else
+    	 {
+    		 if (c == TRAMA_END)
+			 {
+    			 pcurrentBuffered[trama_counter] = '\0';
+				 current = strtod(pcurrentBuffered, NULL);
+
+				 //Serial.println(current,2);
+				 sm0 = 0x00;
+			 }
+    		 else
+    		 {
+    			 pcurrentBuffered[trama_counter++] = c;
+    		 }
+
+    	 }
+    }
 }
 
 ISR(TIMER0_COMPA_vect)
