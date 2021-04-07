@@ -1,6 +1,7 @@
 /* Medicion de resistencia de material
  * Eclipse IDE Eclipse IDE for C/C++ Developers (includes Incubating components) Version: 2020-12 (4.18.0)
  * Arduino Plugins
+   7/04/20201: Adicionando varias mejoras
  *
  */
 
@@ -45,12 +46,19 @@ void IsrForQDEC(void);
 typedef int64_t ROTARYCOUNT_T;//para rotaryCount y quien va a tomar su ultimo valor para comparar
 //
 volatile ROTARYCOUNT_T rotaryCount = 0;
-ROTARYCOUNT_T rotaryCount_last = 0;	//toma el valor de rotaryCount para ser el nuevo punto de referencia de inicio
+volatile ROTARYCOUNT_T rotaryCount_last = 0;	//toma el valor de rotaryCount para ser el nuevo punto de referencia de inicio
 
 //Las sgtes. variables no necesitan ser de 64bits
 int32_t numPulsesIn_ADQ_KMETERS = (ADQ_KMETERS * ENCODER_PPR) / ENCODER_1REV_INMETERS;//truncar
 int32_t numPulses_diff = 0;
 
+
+
+volatile float meters = 0.0f;
+float volts = 0.0f;
+float current = 0.0f;
+//
+volatile int8_t senddata=0;
 void IsrForQDEC(void)
 {
 	using namespace ::SimpleHacks;
@@ -59,6 +67,15 @@ void IsrForQDEC(void)
 		rotaryCount++;
 	else if (event & QDECODER_EVENT_CCW)
 		rotaryCount--;
+
+	//-------------------------
+	numPulses_diff = rotaryCount - rotaryCount_last;//el software estaria siempre recibiendo el rotaryCount
+	if (numPulses_diff >= numPulsesIn_ADQ_KMETERS)
+	{
+		rotaryCount_last = rotaryCount;
+		meters = rotaryCount * ENC_RESOL;
+		senddata = 1;
+	}
 }
 
 //inline float enc_getMeters(void)
@@ -79,16 +96,11 @@ inline void enc_resetCounter(void)
 
 int16_t ADQ_KTIME=0;
 
-
 //Current measurement
 #define TRAMA_START '@'
 #define TRAMA_END 	'\n'
 //#define TRAMA_PAYLOAD_SIZEMAX    sizeof(float)//determinado por el compilador
 
-float meters = 0.0f;
-float volts = 0.0f;
-float current = 0.0f;
-//
 void setup()
 {
 
@@ -129,15 +141,11 @@ int8_t send(float m, float v, float current)
 {
     Serial.print(m,2);
     Serial.print(",");
-    //Serial.println(v*1000,1);//represente en millivolts
-
     Serial.print(v*1000,1);//represente en millivolts
     Serial.print(",");
     Serial.println(current,2);
-
     return 0;
 }
-
 
 void loop()
 {
@@ -157,21 +165,24 @@ void loop()
         main_flag.f10ms = 1;
     }
     //-------------------------
-	numPulses_diff = rotaryCount - rotaryCount_last;//el software estaria siempre recibiendo el rotaryCount
-	if (numPulses_diff >= numPulsesIn_ADQ_KMETERS)
+//	numPulses_diff = rotaryCount - rotaryCount_last;//el software estaria siempre recibiendo el rotaryCount
+//	if (numPulses_diff >= numPulsesIn_ADQ_KMETERS)
+//	{
+//		rotaryCount_last = rotaryCount;
+//		meters = rotaryCount * ENC_RESOL;
+//		senddata = 1;
+//	}
+	//-------------------------
+	if (senddata == 1)
 	{
-		rotaryCount_last = rotaryCount;
-
-		//Serial.print("pdiff: ");Serial.print(numPulses_diff);
-		meters = rotaryCount * ENC_RESOL;
-		//Serial.print(meters);// Serial.println(" m");
+		senddata = 0;
+		//
 		volts = voltageMeas();
-		//send(meters,volts);
 		send(meters,volts, current);
-	}
-	//Serial.println(voltageMeas());
 
-    //----------------------
+	}
+	//----------------------
+	//Serial.println(voltageMeas());
     if (main_flag.f10ms)
     {
         if (++counter1 == 2)    //20ms
