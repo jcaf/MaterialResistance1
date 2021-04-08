@@ -21,8 +21,8 @@ float voltageMeas(void)
     //
     v = ib16 * P_GAIN;//aqui v ya es voltaje
 
-    v = v - 1.5;//1.5 center, elimino el offset
-    //v = v - 1.498;//1.5 center, elimino el offset
+    //v = v - 1.5;//1.5 center, elimino el offset
+    v = v - 1.496;//1.5 center, elimino el offset
     v = v * -1; //invierto la señal
     
     return v;
