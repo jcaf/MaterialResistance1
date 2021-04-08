@@ -148,7 +148,7 @@ int8_t send(float m, float v, float current)
     return 0;
 }
 
-#define VOLTS_NUM_SAMPLES 1000
+#define VOLTS_NUM_SAMPLES 2000
 float volts = 0.0f;
 float volts_acc = 0;
 float volts_media = 0;
