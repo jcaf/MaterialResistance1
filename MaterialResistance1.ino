@@ -56,7 +56,7 @@ int32_t numPulses_diff = 0;
 
 
 volatile float meters = 0.0f;
-float volts = 0.0f;
+//float volts = 0.0f;//-> Ahora se toma la media en el tiempo
 float current = 0.0f;
 //
 volatile int8_t senddata=0;
@@ -148,6 +148,12 @@ int8_t send(float m, float v, float current)
     return 0;
 }
 
+#define VOLTS_NUM_SAMPLES 20
+float volts = 0.0f;
+float volts_acc = 0;
+float volts_media = 0;
+int voltsCounterMedia=0;
+
 void loop()
 {
 	uint8_t c;
@@ -174,13 +180,25 @@ void loop()
 //		senddata = 1;
 //	}
 	//-------------------------
+    volts = voltageMeas();
+	volts_acc += volts;
+    if (++voltsCounterMedia >= VOLTS_NUM_SAMPLES)
+    {
+    	voltsCounterMedia = 0;
+    	volts_media = (volts_acc/VOLTS_NUM_SAMPLES);
+
+    	volts_acc = 0;
+	}
+
+
+    //-------------------------
 	if (senddata == 1)
 	{
 		senddata = 0;
 		//
-		volts = voltageMeas();
-		send(meters,volts, current);
-
+		//volts = voltageMeas();
+		//send(meters,volts, current);
+		send(meters,volts_media, current);//La corriente tambien es la media...salvo que el Atmega328P lo realiza internamente y despues envia por el UART
 	}
 	//----------------------
 	//Serial.println(voltageMeas());
