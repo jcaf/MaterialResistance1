@@ -201,7 +201,7 @@ void loop()
 		send(meters,volts_media, current);//La corriente tambien es la media...salvo que el Atmega328P lo realiza internamente y despues envia por el UART
 	}
 	//----------------------
-Serial.println(volts_media);
+Serial.println((volts_media*1000),1);
 
     if (main_flag.f10ms)
     {
