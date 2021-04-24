@@ -346,7 +346,7 @@ int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 
 		if (++smoothAlgJob.counter >= SMOOTHALG_MAXSIZE)
 		{
-			smoothAlgJob.counter = 0x00;
+			smoothAlgJob.counter = 0x00;//bug fixed
 
 			average /= SMOOTHALG_MAXSIZE;
 			//
