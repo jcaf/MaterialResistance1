@@ -46,7 +46,7 @@ struct _job
 	}f;
 };
 
-#define SMOOTHALG_MAXSIZE 10
+#define SMOOTHALG_MAXSIZE 200L
 
 struct _job mv1Capture;
 struct _job emptyJob;
@@ -127,8 +127,7 @@ int16_t ADQ_KTIME=0;
 
 void setup()
 {
-
-    I2C_unimaster_init(100E3);//100KHz
+    I2C_unimaster_init(400E3);//100KHz
 
     //ADS1115 init
     uint8_t reg[2];
@@ -256,7 +255,7 @@ void loop()
 		//
 		//volts = voltageMeas();
 		//send(meters,volts, current);
-		send(meters,volts_media, current);//La corriente tambien es la media...salvo que el Atmega328P lo realiza internamente y despues envia por el UART
+		//send(meters,volts_media, current);//La corriente tambien es la media...salvo que el Atmega328P lo realiza internamente y despues envia por el UART
 		send(meters,mv1, current);//La corriente tambien es la media...salvo que el Atmega328P lo realiza internamente y despues envia por el UART
 	}
 	//----------------------
@@ -329,8 +328,8 @@ ISR(TIMER0_COMPA_vect)
 int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 {
 	static float average=0;
-	static int Pos;	//# de elementos > que la media
-	static int Neg;	//# de elementos > que la media
+	static int16_t Pos;	//# de elementos > que la media
+	static int16_t Neg;	//# de elementos > que la media
 	static float TD;	//Total Deviation
 	//float A;	//Correct answer
 
@@ -347,6 +346,8 @@ int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 
 		if (++smoothAlgJob.counter >= SMOOTHALG_MAXSIZE)
 		{
+			smoothAlgJob.counter = 0x00;
+
 			average /= SMOOTHALG_MAXSIZE;
 			//
 			Pos = 0;
@@ -373,7 +374,7 @@ int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 			smoothAlgJob.counter = 0;
 			smoothAlgJob.sm0 = 0;
 			//
-			*Answer = average + ( ( (Pos-Neg)*TD )/ (SMOOTHALG_MAXSIZE*SMOOTHALG_MAXSIZE));
+			*Answer = average + ( ( (Pos-Neg) * TD )/ ( SMOOTHALG_MAXSIZE*SMOOTHALG_MAXSIZE) );
 			return 1;
 			//
 		}
