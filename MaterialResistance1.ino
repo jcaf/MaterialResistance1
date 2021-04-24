@@ -46,15 +46,15 @@ struct _job
 	}f;
 };
 
-#define SMOOTHALG_MAXSIZE 200L
+#define SMOOTHALG_MAXSIZE 100L
 
 struct _job mv1Capture;
 struct _job emptyJob;
 struct _job smoothAlgJob;
-//int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer);
-int8_t smoothAlg_nonblock(float *buffer, float *Answer);
-//int16_t mv1_smoothVector[SMOOTHALG_MAXSIZE];
-float mv1_smoothVector[SMOOTHALG_MAXSIZE];
+int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer);
+//int8_t smoothAlg_nonblock(float *buffer, float *Answer);
+int16_t mv1_smoothVector[SMOOTHALG_MAXSIZE];
+//float mv1_smoothVector[SMOOTHALG_MAXSIZE];
 
 //+- Encoder
 uint16_t ENCODER_PPR = 500;    			//500 Pulses Per Revolution
@@ -206,14 +206,14 @@ void loop()
     if (mv1Capture.sm0 == 0)
     {
         //++-integers
-//        I2Ccfx_ReadRegistersAtAddress(ADS115_ADR_GND, ADS1115_CONVRS_REG, &reg[0], 2);
-//        ib16 = (reg[0]<<8) + reg[1];
-//        mv1_smoothVector[mv1Capture.counter] = ib16;
+        I2Ccfx_ReadRegistersAtAddress(ADS115_ADR_GND, ADS1115_CONVRS_REG, &reg[0], 2);
+        ib16 = (reg[0]<<8) + reg[1];
+        mv1_smoothVector[mv1Capture.counter] = ib16;
         //-++
 
-        //++-floats
-        mv1_smoothVector[mv1Capture.counter] = voltageMeas();
-        //-++
+//        //++-floats
+//        mv1_smoothVector[mv1Capture.counter] = voltageMeas();
+//        //-++
 
         if (++mv1Capture.counter >= SMOOTHALG_MAXSIZE)
 		{
@@ -226,12 +226,12 @@ void loop()
     	if (smoothAlg_nonblock(mv1_smoothVector, &mv1_smothed) )
     	{
     		//ver. integers
-//    		mv1 = mv1_smothed * P_GAIN;//aqui v ya es voltaje
-//    		mv1 = mv1 - 1.498;//1.5 center, elimino el offset
-//    		mv1 = mv1 * -1; //invierto la señal
+    		mv1 = mv1_smothed * P_GAIN;//aqui v ya es voltaje
+    		mv1 = mv1 - 1.498;//1.5 center, elimino el offset
+    		mv1 = mv1 * -1; //invierto la señal
 
     		//++- ver. float
-    		mv1 = mv1_smothed;
+//    		mv1 = mv1_smothed;
     		//
     		mv1Capture.sm0 = 0x0;
     	}
@@ -310,6 +310,7 @@ ISR(TIMER0_COMPA_vect)
  * add 23/04/2021
  */
 //struct _job smoothAlgJob;
+/*
 int8_t smoothAlg_nonblock(float *buffer, float *Answer)
 {
 	static float average=0;
@@ -366,9 +367,9 @@ int8_t smoothAlg_nonblock(float *buffer, float *Answer)
 	}
 	return 0;
 }
-
-/*//OK, pero ahora probando con float buffer
- * int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
+*/
+//OK, pero ahora probando con float buffer
+int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 {
 	static float average=0;
 	static int16_t Pos;	//# de elementos > que la media
@@ -424,5 +425,3 @@ int8_t smoothAlg_nonblock(float *buffer, float *Answer)
 	}
 	return 0;
 }
- *
- */
