@@ -406,7 +406,7 @@ int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 		if (buffer[smoothAlgJob.counter] > average)
 		{
 			Pos++;
-			TD += (buffer[smoothAlgJob.counter]-average);//Find |Dtotal|
+			TD += ( ((float)(buffer[smoothAlgJob.counter]))-average);//Find |Dtotal|
 		}
 		if (buffer[smoothAlgJob.counter] < average)
 		{
@@ -417,6 +417,11 @@ int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 		{
 			smoothAlgJob.counter = 0;
 			smoothAlgJob.sm0 = 0;
+			//bug
+			if (TD<0)
+			{
+				TD *= -1;//convirtiendo a positivo
+			}
 			//
 			*Answer = average + ( ( (Pos-Neg) * TD )/ ( SMOOTHALG_MAXSIZE*SMOOTHALG_MAXSIZE) );
 			return 1;
