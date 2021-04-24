@@ -8,7 +8,6 @@
 float voltageMeas(void)
 {
     float v;
-    //float i;
     int16_t ib16;
     uint8_t reg[2];
     //

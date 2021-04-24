@@ -51,8 +51,10 @@ struct _job
 struct _job mv1Capture;
 struct _job emptyJob;
 struct _job smoothAlgJob;
-int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer);
-int16_t mv1_smoothVector[SMOOTHALG_MAXSIZE];
+//int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer);
+int8_t smoothAlg_nonblock(float *buffer, float *Answer);
+//int16_t mv1_smoothVector[SMOOTHALG_MAXSIZE];
+float mv1_smoothVector[SMOOTHALG_MAXSIZE];
 
 //+- Encoder
 uint16_t ENCODER_PPR = 500;    			//500 Pulses Per Revolution
@@ -199,35 +201,19 @@ void loop()
         isr_flag.f10ms = 0;
         main_flag.f10ms = 1;
     }
-    //-------------------------
-//	numPulses_diff = rotaryCount - rotaryCount_last;//el software estaria siempre recibiendo el rotaryCount
-//	if (numPulses_diff >= numPulsesIn_ADQ_KMETERS)
-//	{
-//		rotaryCount_last = rotaryCount;
-//		meters = rotaryCount * ENC_RESOL;
-//		senddata = 1;
-//	}
-	//-------------------------
-//    volts = voltageMeas();
-//	volts_acc += volts;
-//    if (++voltsCounterMedia >= VOLTS_NUM_SAMPLES)
-//    {
-//    	voltsCounterMedia = 0;
-//    	//
-//    	volts_media = (volts_acc/VOLTS_NUM_SAMPLES);
-//
-//    	volts_acc = 0;
-//	}
-//    int16_t ib16;
-//	uint8_t reg[2];
+
 
     if (mv1Capture.sm0 == 0)
     {
-        //
-        I2Ccfx_ReadRegistersAtAddress(ADS115_ADR_GND, ADS1115_CONVRS_REG, &reg[0], 2);
-        ib16 = (reg[0]<<8) + reg[1];
+        //++-integers
+//        I2Ccfx_ReadRegistersAtAddress(ADS115_ADR_GND, ADS1115_CONVRS_REG, &reg[0], 2);
+//        ib16 = (reg[0]<<8) + reg[1];
+//        mv1_smoothVector[mv1Capture.counter] = ib16;
+        //-++
 
-        mv1_smoothVector[mv1Capture.counter] = ib16;
+        //++-floats
+        mv1_smoothVector[mv1Capture.counter] = voltageMeas();
+        //-++
 
         if (++mv1Capture.counter >= SMOOTHALG_MAXSIZE)
 		{
@@ -239,10 +225,13 @@ void loop()
     {
     	if (smoothAlg_nonblock(mv1_smoothVector, &mv1_smothed) )
     	{
-    		mv1 = mv1_smothed * P_GAIN;//aqui v ya es voltaje
-    		mv1 = mv1 - 1.498;//1.5 center, elimino el offset
-    		mv1 = mv1 * -1; //invierto la señal
+    		//ver. integers
+//    		mv1 = mv1_smothed * P_GAIN;//aqui v ya es voltaje
+//    		mv1 = mv1 - 1.498;//1.5 center, elimino el offset
+//    		mv1 = mv1 * -1; //invierto la señal
 
+    		//++- ver. float
+    		mv1 = mv1_smothed;
     		//
     		mv1Capture.sm0 = 0x0;
     	}
@@ -252,10 +241,6 @@ void loop()
 	if (senddata == 1)
 	{
 		senddata = 0;
-		//
-		//volts = voltageMeas();
-		//send(meters,volts, current);
-		//send(meters,volts_media, current);//La corriente tambien es la media...salvo que el Atmega328P lo realiza internamente y despues envia por el UART
 		send(meters,mv1, current);//La corriente tambien es la media...salvo que el Atmega328P lo realiza internamente y despues envia por el UART
 	}
 	//----------------------
@@ -325,7 +310,7 @@ ISR(TIMER0_COMPA_vect)
  * add 23/04/2021
  */
 //struct _job smoothAlgJob;
-int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
+int8_t smoothAlg_nonblock(float *buffer, float *Answer)
 {
 	static float average=0;
 	static int16_t Pos;	//# de elementos > que la media
@@ -381,3 +366,63 @@ int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
 	}
 	return 0;
 }
+
+/*//OK, pero ahora probando con float buffer
+ * int8_t smoothAlg_nonblock(int16_t *buffer, float *Answer)
+{
+	static float average=0;
+	static int16_t Pos;	//# de elementos > que la media
+	static int16_t Neg;	//# de elementos > que la media
+	static float TD;	//Total Deviation
+	//float A;	//Correct answer
+
+	//1- Calculate media
+	if (smoothAlgJob.sm0 == 0)
+	{
+		average = 0;
+		smoothAlgJob.counter = 0x0;
+		smoothAlgJob.sm0++;
+	}
+	if (smoothAlgJob.sm0 == 1)
+	{
+		average +=buffer[smoothAlgJob.counter];
+
+		if (++smoothAlgJob.counter >= SMOOTHALG_MAXSIZE)
+		{
+			smoothAlgJob.counter = 0x00;//bug fixed
+
+			average /= SMOOTHALG_MAXSIZE;
+			//
+			Pos = 0;
+			Neg = 0;
+			TD = 0;
+			smoothAlgJob.sm0++;
+		}
+	}
+	//2 - Find Pos and Neg + |Dtotal|
+	else if (smoothAlgJob.sm0 == 2)
+	{
+		if (buffer[smoothAlgJob.counter] > average)
+		{
+			Pos++;
+			TD += (buffer[smoothAlgJob.counter]-average);//Find |Dtotal|
+		}
+		if (buffer[smoothAlgJob.counter] < average)
+		{
+			Neg++;
+		}
+		//
+		if (++smoothAlgJob.counter >= SMOOTHALG_MAXSIZE)
+		{
+			smoothAlgJob.counter = 0;
+			smoothAlgJob.sm0 = 0;
+			//
+			*Answer = average + ( ( (Pos-Neg) * TD )/ ( SMOOTHALG_MAXSIZE*SMOOTHALG_MAXSIZE) );
+			return 1;
+			//
+		}
+	}
+	return 0;
+}
+ *
+ */
